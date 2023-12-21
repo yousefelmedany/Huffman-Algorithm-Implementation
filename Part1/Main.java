@@ -1,4 +1,5 @@
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 
@@ -19,8 +20,8 @@ public static void main(String[] args) throws NumberFormatException, IOException
 
     Activity_Handler mActivity_Handler = new Activity_Handler();
     int res = mActivity_Handler.Solve_Activity_Selection(myActivities);
-    mActivity_Handler.SaveResult(res, path.substring(0, path.length()-7)+"_20012293.out.txt");
+    File newFile = new File(path);
+    String newPath = path.substring(0, path.length()-7)+"_20012293.out.txt";
+    mActivity_Handler.SaveResult(res,newPath);
     }
-
-
 }
