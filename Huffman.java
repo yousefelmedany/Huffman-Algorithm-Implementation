@@ -1,9 +1,13 @@
 import java.io.BufferedInputStream;
 import java.io.BufferedWriter;
+import java.io.ByteArrayInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -16,22 +20,6 @@ import java.util.Map;
 import java.util.PriorityQueue;
 
 
-class Huffman_Node{
-    byte data;
-    int frequency;
-    String codelength;
-    Huffman_Node leftChild;
-    Huffman_Node rightChild;
-
-    public Huffman_Node(byte d, int f, String c, Huffman_Node l, Huffman_Node r){
-            this.data=d;
-            this.codelength=c;
-            this.frequency = f;
-            this.leftChild = l;
-            this.rightChild = r;
-    }
-}
-
 class HuffmanComparator implements Comparator<Huffman_Node>{
     public int compare(Huffman_Node i, Huffman_Node j){
         return Integer.compare(i.frequency, j.frequency);
@@ -40,20 +28,25 @@ class HuffmanComparator implements Comparator<Huffman_Node>{
 
 
 public class Huffman {
+    static int Msize=0;
 
-    public static void GenerateCodes(Huffman_Node root, Map<Byte, String> mylist) 
+    //Generate the codewords of huffman tree
+    public static void GenerateCodes(Huffman_Node root, Map<ByteArrayWrapper, String> mylist) 
     { 
         if (root.leftChild == null && root.rightChild == null) { 
-            mylist.put(root.data, root.codelength);
+            ByteArrayWrapper Wap = new ByteArrayWrapper(root.data);
+            mylist.put(Wap, root.codelength);
+            Msize+= root.data.length+root.codelength.getBytes().length;
               return; 
         }
         root.leftChild.codelength=root.codelength+"0"; 
         root.rightChild.codelength=root.codelength+"1"; 
         
         GenerateCodes(root.leftChild, mylist); 
-        GenerateCodes(root.rightChild, mylist); 
+        GenerateCodes(root.rightChild, mylist);
     } 
-   
+    
+    //Construct the huffman tree then return the root node
     public static Huffman_Node HuffmanAlgorithm(PriorityQueue<Huffman_Node> queue){
         
         while((!queue.isEmpty())&& (queue.size()>1)){
@@ -61,171 +54,330 @@ public class Huffman {
             queue.poll();
             Huffman_Node right = queue.peek();
             queue.poll(); 
-            Huffman_Node Parent = new Huffman_Node((byte)'0', left.frequency+right.frequency, null, left, right);
+            Huffman_Node Parent = new Huffman_Node(null, left.frequency+right.frequency, null, left, right);
             queue.add(Parent);
         }
         return queue.peek();
     }
-    
-    public static void Compress(int n, String Filepath) throws IOException{
+
+    //Compress a given file using its absoulte path and n
+    public static stats Compress(int n, String Filepath) throws IOException{
         
-        Map<Byte, Integer> byteFrequencyMap = new HashMap<>();    
+        Map<ByteArrayWrapper, Integer> byteFrequencyMap = new HashMap<>();    
         PriorityQueue<Huffman_Node> HuffmanPriorityQueue = new PriorityQueue<>(new HuffmanComparator());
 
         BufferedInputStream StreamReader = new BufferedInputStream(new FileInputStream(Filepath));
-        long fileLength = StreamReader.available();
-        int size = 102400;
+        int filesize=0;
+        int size = (102400000/n)*n;
         byte[] buffer = new byte[size];
         int bytesRead;
-         
         
-
-        long start = System.currentTimeMillis();      
         while ((bytesRead = StreamReader.read(buffer)) != -1) {
-            for(int i= 0;i<bytesRead;i++){
-                    byteFrequencyMap.put(buffer[i], byteFrequencyMap.getOrDefault(buffer[i], 0) + 1);
-            }
-                        
+            filesize+=bytesRead;  
+            int i;
+            for (i = 0; i < (bytesRead / n) * n; i += n) {
+                ByteArrayWrapper key = new ByteArrayWrapper(Arrays.copyOfRange(buffer, i, i + n));
+                byteFrequencyMap.put(key, byteFrequencyMap.getOrDefault(key, 0) + 1);
+                }
+            if (i != bytesRead) {
+                ByteArrayWrapper key = new ByteArrayWrapper(Arrays.copyOfRange(buffer, i, bytesRead));
+                byteFrequencyMap.put(key, byteFrequencyMap.getOrDefault(key, 0) + 1);
+            
+            }            
         }
-        StreamReader.close();
-
-        long end = System.currentTimeMillis();
-        System.out.println("Time of section 1 is "+(end-start)+" ms");
-
+        StreamReader.close();    
         
-        
-        
-        start = System.currentTimeMillis();
-        List<Map.Entry<Byte, Integer>> sortedList = new ArrayList<>(byteFrequencyMap.entrySet());
+        List<Map.Entry<ByteArrayWrapper, Integer>> sortedList = new ArrayList<>(byteFrequencyMap.entrySet());
         Collections.sort(sortedList, Map.Entry.comparingByValue());
-        end = System.currentTimeMillis();
-        System.out.println("Time of section 2 is "+(end-start)+" ms");
 
-
-        // for (Map.Entry<Byte, Integer> entry : sortedList) {
-        //     System.out.println("Byte: " + entry.getKey()+ ", Frequency: " + entry.getValue());
-        // }
-
-        for (Map.Entry<Byte, Integer> entry : sortedList) {
-            Huffman_Node newnode = new Huffman_Node(entry.getKey(), entry.getValue(),"", null,null);
+        for (Map.Entry<ByteArrayWrapper, Integer> entry : sortedList) {
+            Huffman_Node newnode = new Huffman_Node(entry.getKey().getarray(), entry.getValue(),"", null,null);
             HuffmanPriorityQueue.add(newnode);          
         }
-        // for (Huffman_Node entry : HuffmanPriorityQueue) {
-        //     System.out.println("Key is "+entry.data+" Frequency is "+entry.frequency);
-        // }
-
-        start = System.currentTimeMillis();
         
         Huffman_Node TreeRoot = HuffmanAlgorithm(HuffmanPriorityQueue);
         TreeRoot.codelength="";
-        Map<Byte, String> HuffmanMap = new HashMap<>();
+        Map<ByteArrayWrapper, String> HuffmanMap = new HashMap<>();
         GenerateCodes(TreeRoot, HuffmanMap);
-        
-        end = System.currentTimeMillis();
-        System.out.println("Time of section 3 is "+(end-start)+" ms");
-
-
-        // for (Map.Entry<Byte, String> entry : HuffmanMap.entrySet()) {
-        //     System.out.println("Key is "+entry.getKey()+" CodeWord is "+entry.getValue());
-        // }
 
         File newFile = new File(Filepath);
         String NewPath = newFile.getParent()+"\\20012293."+n+"."+newFile.getName()+".hc";
-        BufferedWriter writer = new BufferedWriter(new FileWriter(NewPath));
+        DataOutputStream outputStream = new DataOutputStream(new FileOutputStream(NewPath));        
         
+
+        long start = System.currentTimeMillis();
+        byte[] valconverter;
+        String value;
+        //Writing the metadata
+        outputStream.writeInt(filesize);
+        outputStream.writeByte('\n'); 
+        outputStream.writeInt(Msize+HuffmanMap.size()*2);
+        outputStream.writeByte('\n'); 
+        outputStream.writeInt(n);
+        outputStream.write('\n'); 
+        outputStream.writeInt(HuffmanMap.size());
+        outputStream.write('\n');
+        Map.Entry<ByteArrayWrapper, String> ext = null;
+        for (Map.Entry<ByteArrayWrapper, String> entry : HuffmanMap.entrySet()) {
+            if(entry.getKey().getarray().length<n){
+                ext = entry;
+                continue;
+            }
+            outputStream.write(entry.getKey().getarray());
+            value = (':'+entry.getValue()+'\n');
+            valconverter = value.getBytes();
+            outputStream.write(valconverter);
+        }
+        if(ext!=null){
+            outputStream.write(ext.getKey().getarray());
+            value = (":"+ext.getValue()+'\n');
+            valconverter = value.getBytes();
+            outputStream.write(valconverter);            
+        }
+         
+        StreamReader = new BufferedInputStream(new FileInputStream(Filepath));          
+        StringBuilder s = new StringBuilder();
+        byte remainingBits = 0;
+        List<Byte> li = new ArrayList<>();
+        int size2 = (1024000/n)*n;
+        byte[] newbuffer = new byte[size2];
+        while ((bytesRead = StreamReader.read(newbuffer)) != -1) {
+            if((bytesRead%n)==0){
+                for(int i=0;i<bytesRead;i+=n){
+                    ByteArrayWrapper key = new ByteArrayWrapper(Arrays.copyOfRange(buffer, i, i + n));
+                    s.append(HuffmanMap.get(key));
+                }
+                for(int i=0;i<s.length()/8;i++){
+                    for(int j=0;j<8;j++){
+                        if (s.charAt(i*8+j) == '0') {
+                            remainingBits <<= 1; 
+                        }else{
+                            remainingBits <<= 1;
+                            remainingBits |= 1;  
+                        }                   
+                    }
+                    li.add(remainingBits);
+                    remainingBits = 0;
+                }
+                if((s.length()%8)!=0){
+                    s.delete(0, (s.length()/8)*8);                    
+                }else{
+                    s.setLength(0);
+                }
             
-        start = System.currentTimeMillis();
-        writer.write(Integer.toString(n)+"\n");
-        writer.write(Integer.toString(HuffmanMap.size())+"\n");
-        for (Map.Entry<Byte, String> entry : HuffmanMap.entrySet()) {
-            // System.out.println(entry.getKey()+" "+(char)(entry.getKey() & 0xFF)+" "+entry.getValue());
-            writer.write(entry.getKey());    
-            writer.write(entry.getValue()+"\n");
+            }else{
+                int auxsize = (bytesRead/n)*n; int x;
+                for(x=0;x<auxsize;x+=n){
+                    ByteArrayWrapper key = new ByteArrayWrapper(Arrays.copyOfRange(buffer, x, x + n));
+                    s.append(HuffmanMap.get(key));
+                }
+                ByteArrayWrapper key = new ByteArrayWrapper(Arrays.copyOfRange(buffer, x, bytesRead));
+                s.append(HuffmanMap.get(key));
+                for(int i=0;i<s.length()/8;i++){
+                    for(int j=0;j<8;j++){
+                        if (s.charAt(i*8+j) == '0') {
+                            remainingBits <<= 1; 
+                        }else{
+                            remainingBits <<= 1; 
+                            remainingBits |= 1;  
+                        }                   
+                    }
+                    li.add(remainingBits);
+                    remainingBits = 0;
+                }
+                if((s.length()%8)!=0){
+                    s.delete(0, (s.length()/8)*8);                    
+                }else{
+                    s.setLength(0);
+                }
+            }
         }
-        end = System.currentTimeMillis();
-        System.out.println("Time of section 4 is "+(end-start)+" ms");
-
-
-        start = System.currentTimeMillis();
+        StreamReader.close();  
         
-        StreamReader = new BufferedInputStream(new FileInputStream(Filepath));
-        String s ="";
-        while ((bytesRead = StreamReader.read(buffer)) != -1) {
-            for(int i= 0;i<bytesRead;i++){
-                s+=HuffmanMap.get(buffer[i]);
-            }   
-            writer.write(s);  
-            s="";
+        remainingBits=0;
+        if (s.length() > 0) {
+            for(int j=0;j<s.length();j++){
+                if (s.charAt(j) == '0') {
+                    remainingBits <<= 1; // Left shift to 0
+                }else{
+                    remainingBits <<= 1; // Left shift to 1
+                    remainingBits |= 1;  // Set the least significant bit to 1
+                }                   
+            }
+            remainingBits <<= (8-s.length());
+            li.add(remainingBits);
         }
-        end = System.currentTimeMillis();
-        System.out.println("Time of section 5 is "+(end-start)+" ms");
-        writer.close();
+        
+        int chunksize = 10240000, i;
+        byte[] chunk;
+        for(i=0;i<li.size()/chunksize;i++){
+            chunk = new byte[chunksize];
+            for(int j=0;j<chunksize;j++){
+                chunk[j] = li.get(i*chunksize+j);
+            }
+            outputStream.write(chunk);
+        }
+        chunk = new byte[li.size()-(i*chunksize)];
+        for(int l = 0 ; l<(li.size()-i*chunksize); l++){
+            chunk[l] = li.get(i*chunksize+l);
+        }
+        if(chunk.length!=0){
+            outputStream.write(chunk);
+        }
+        outputStream.write('\n');
+        outputStream.write((byte)(s.length()));        
+        outputStream.close();
+        long end = System.currentTimeMillis();
 
-        System.out.println("Map Size is "+HuffmanMap.size());
+        int compressedsize = li.size()+Msize+22+HuffmanMap.size()*2;
+        stats inf = new stats(end-start, compressedsize, filesize);
+        return inf;
     }
-    
-    public static void deCompress(String path) throws IOException{
+        
+    //Decompress a given file through its path 
+    public static long deCompress(String path) throws IOException{
+        long start = System.currentTimeMillis();
         BufferedInputStream StreamReader = new BufferedInputStream(new FileInputStream(path));
-        long fileLength = StreamReader.available();
-        int size = 102400;
+        byte[] arr = new byte[20];
+        StreamReader.read(arr);
+        int originalsize =  (arr[0] & 0xFF) << 24 | (arr[1] & 0xFF) << 16 | (arr[2] & 0xFF) << 8 | (arr[3] & 0xFF);
+        int headersize = (arr[5] & 0xFF) << 24 | (arr[6] & 0xFF) << 16 | (arr[7] & 0xFF) << 8 | (arr[8] & 0xFF);
+        int n = (arr[10] & 0xFF) << 24 | (arr[11] & 0xFF) << 16 | (arr[12] & 0xFF) << 8 | (arr[13] & 0xFF);
+        int MapSize = (arr[15] & 0xFF) << 24 | (arr[16] & 0xFF) << 16 | (arr[17] & 0xFF) << 8 | (arr[18] & 0xFF);
+        
+        Map<String, ByteArrayWrapper> HuffmanMap = new HashMap<>();
+        byte[] header = new byte[headersize];
+        StringBuilder s = new StringBuilder();
+        StreamReader.read(header);
+        if(originalsize%n==0){
+            int i=0;
+            while(i<headersize){
+                ByteArrayWrapper unit = new ByteArrayWrapper(Arrays.copyOfRange(header, i, i+n));
+                i+=(n+1);
+                while(header[i]==48 || header[i]==49){
+                    s.append((char)header[i]);
+                    i++;
+                }   
+                HuffmanMap.put(s.toString(), unit);
+                s.setLength(0);
+                i++;
+            }
+
+        }else{
+            int i=0, entries=0;
+            while(i<headersize){
+                if(entries==(MapSize-1)){
+                    break;
+                }
+
+                ByteArrayWrapper unit = new ByteArrayWrapper(Arrays.copyOfRange(header, i, i+n));
+                i+=(n+1);
+                while(header[i]==48 || header[i]==49){
+                    s.append((char)header[i]);
+                    i++;
+                }   
+                HuffmanMap.put(s.toString(), unit);
+                entries++;
+                s.setLength(0);
+                i++;
+            }
+            ByteArrayWrapper unit = new ByteArrayWrapper(Arrays.copyOfRange(header, i, i+(originalsize%n)));
+            i+=((originalsize%n)+1);
+            while(header[i]==48 || header[i]==49){
+                s.append((char)header[i]);
+                i++;
+            }
+            HuffmanMap.put(s.toString(), unit);
+        }
+
+        int size = 25000000;
         byte[] buffer = new byte[size];
         int bytesRead;
-        Map<Byte, String> HuffmanMap = new HashMap<>();
-        int n=0, MapSize=0, entries_read=0;
-
-        boolean hasheader=true, FirstChunk=true;
-        while ((bytesRead = StreamReader.read(buffer)) != -1) {
-            System.out.println(bytesRead);
-            if(hasheader){
-                int i=0;
-                if(FirstChunk){
-                    while(buffer[i]!='\n'){
-                        i++;
-                    }
-                    byte[] subsetBytes = Arrays.copyOfRange(buffer, 0, i);
-                    String subsetString = new String(subsetBytes, StandardCharsets.UTF_8);
-                    n = Integer.parseInt(subsetString);
-                    i++;
-                    int k=i;
-
-                    while(buffer[i]!='\n'){
-                        i++;
-                    }
-                    subsetBytes = Arrays.copyOfRange(buffer, k, i);
-                    subsetString = new String(subsetBytes, StandardCharsets.UTF_8);
-                    MapSize = Integer.parseInt(subsetString);
-                    FirstChunk = false;
+        StringBuilder sb = new StringBuilder();
+        StringBuilder chunk = new StringBuilder();
+        byte offset=0;
+        List<Byte> li = new ArrayList<>();
+        
+        
+        File newFile = new File(path);
+        String NewPath = newFile.getParent()+"\\extracted."+newFile.getName().substring(0, newFile.getName().length()-3);        
+        DataOutputStream outputStream = new DataOutputStream(new FileOutputStream(NewPath));  
+        byte[] chunkArray;        
+        while ((bytesRead=StreamReader.read(buffer)) != -1) {
+            if(bytesRead<size){
+                offset = buffer[bytesRead-1];
+                for(int i=0;i<bytesRead-2;i++){
+                    for (int j = 7; j >= 0; j--) {
+                        sb.append((buffer[i] & (1 << j)) == 0 ? '0' : '1');
+                    }  
                 }
-                
-                // i++;
-                // while((entries_read<MapSize)&&(i<bytesRead)){
-                //     int k= i+1;
-                //     while(buffer[k]!='\n'){
-                //         j++;
-                //     }
-                //     HuffmanMap.put(buffer[i], new String(Arrays.copyOfRange(buffer,k,j), StandardCharsets.UTF_8));
-                // }
-                    hasheader = false;
+
+            }else{
+                for(byte b: buffer){
+                    for (int i = 7; i >= 0; i--) {
+                        sb.append((b & (1 << i)) == 0 ? '0' : '1');
+                    }
+                } 
+
             }
-        }    
-        System.out.println("N is "+n);
-        System.out.println("Map Size is "+MapSize);
-    }
+            if(offset!=0){
+                sb.delete(sb.length()- (8-offset& 0xFF), sb.length());
+            }
+            int i=0;
+            while(i<sb.length()){
+                while(HuffmanMap.get(chunk.toString())==null&&i<sb.length()){
+                    chunk.append(sb.charAt(i));
+                    i++;
+                }
+                if(HuffmanMap.get(chunk.toString())!=null){
+                    for(byte b: HuffmanMap.get(chunk.toString()).getarray()){
+                        li.add(b);
+                    }
+                    chunk.setLength(0);
+                }
+            }
+            sb.setLength(0);
+            if(chunk.length()!=0){
+                sb.append(chunk.toString());
+            }
+                        chunkArray = new byte[li.size()];
+            for(int j=0;j<li.size();j++){
+                chunkArray[j] = li.get(j);
+            }
+            li.clear();
+            outputStream.write(chunkArray);
+        }          
+        outputStream.close();
+        long end=System.currentTimeMillis();
 
+        return end-start;
+}
 
-public static void main(String[] args){
+    public static void main(String[] args){
+        String option = args[0];    
         String Path = args[1];
-        // int n = Integer.parseInt(args[2]);
-        try {
-            
-            long start = System.currentTimeMillis();
-            // Compress(n, Path);
-            deCompress(Path);
-            long end = System.currentTimeMillis();
-            System.out.println("deCompression Time is "+(end-start));
-            
-        } catch (IOException e) {
-            e.printStackTrace();
-        }    
-    }
+        stats info;
+        long time;
+            try {
+                switch (option) {
+                    case "d":
+                        time = deCompress(Path);
+                        System.out.println("DeCompression Time is "+time/1000.0+"s");                    
+                        break;
+                    case "c":
+                        int n = Integer.parseInt(args[2]);
+                        info = Compress(n, Path);
+                        System.out.println("Compression Time is "+info.time/1000.0+" s"); 
+                        System.out.println("Compressed file Size is "+info.compressedsize+" bytes");  
+                        System.out.println("Original File Size is "+info.originalsize+" bytes");  
+                        System.out.println("Compression Ratio is "+(info.compressedsize*1.0/info.originalsize)*100+" %"); 
+
+                        break;
+                    default:
+                        break;
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }    
+        }
 }
